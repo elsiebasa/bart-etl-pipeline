@@ -1,195 +1,124 @@
-import sqlite3
-import logging
-from typing import Dict, List
-from datetime import datetime, timezone
-import json
 import os
+import logging
+from datetime import datetime
+from google.cloud import bigquery
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class BartDataLoader:
-    """Handles loading BART data into SQLite database"""
+    """Loader for BART data into BigQuery"""
     
-    def __init__(self, db_path: str = 'data/bart.db'):
-        """Initialize loader with database path"""
-        self.db_path = db_path
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        self._create_tables()
+    def __init__(self):
+        """Initialize the loader with BigQuery client"""
+        self.client = bigquery.Client()
+        self.project_id = "baet-de-project"  # Your project ID
+        self.dataset_id = "bart_data"        # Your dataset ID
+        
+        # Table IDs
+        self.stations_table_id = f"{self.project_id}.{self.dataset_id}.stations"
+        self.departures_table_id = f"{self.project_id}.{self.dataset_id}.departures"
+        self.metrics_table_id = f"{self.project_id}.{self.dataset_id}.metrics"
     
-    def _create_tables(self):
-        """Create necessary database tables if they don't exist"""
+    def load_stations(self, stations):
+        """Load station data into BigQuery"""
+        if not stations:
+            logger.warning("No station data to load")
+            return
+        
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                
-                # Create stations table
-                cursor.execute('''
-                CREATE TABLE IF NOT EXISTS stations (
-                    station_id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    latitude REAL,
-                    longitude REAL,
-                    address TEXT,
-                    city TEXT,
-                    county TEXT,
-                    state TEXT,
-                    zipcode TEXT,
-                    extracted_at TEXT,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-                )
-                ''')
-                
-                # Create departures table
-                cursor.execute('''
-                CREATE TABLE IF NOT EXISTS departures (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    station_id TEXT,
-                    destination TEXT,
-                    direction TEXT,
-                    minutes INTEGER,
-                    platform TEXT,
-                    line_color TEXT,
-                    length INTEGER,
-                    bikes_allowed BOOLEAN,
-                    delay INTEGER,
-                    extracted_at TEXT,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (station_id) REFERENCES stations(station_id)
-                )
-                ''')
-                
-                # Create metrics table
-                cursor.execute('''
-                CREATE TABLE IF NOT EXISTS metrics (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    total_departures INTEGER,
-                    avg_delay REAL,
-                    max_delay INTEGER,
-                    delayed_trains INTEGER,
-                    delay_rate REAL,
-                    bikes_allowed_rate REAL,
-                    avg_train_length REAL,
-                    direction_counts TEXT,
-                    calculated_at TEXT,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-                )
-                ''')
-                
-                # Create indexes
-                cursor.execute('CREATE INDEX IF NOT EXISTS idx_departures_station ON departures(station_id)')
-                cursor.execute('CREATE INDEX IF NOT EXISTS idx_departures_time ON departures(extracted_at)')
-                cursor.execute('CREATE INDEX IF NOT EXISTS idx_metrics_time ON metrics(calculated_at)')
-                
-                conn.commit()
-                logger.info("Successfully created database tables")
+            # Prepare data for BigQuery
+            rows_to_insert = []
+            for station in stations:
+                rows_to_insert.append({
+                    'station_id': station.get('station_id'),
+                    'name': station.get('name'),
+                    'abbr': station.get('abbr'),
+                    'latitude': station.get('latitude'),
+                    'longitude': station.get('longitude')
+                })
+            
+            # Load data into BigQuery
+            errors = self.client.insert_rows_json(
+                self.stations_table_id, 
+                rows_to_insert
+            )
+            
+            if errors:
+                logger.error(f"Errors loading stations: {errors}")
+            else:
+                logger.info(f"Loaded {len(rows_to_insert)} stations into BigQuery")
                 
         except Exception as e:
-            logger.error(f"Error creating database tables: {str(e)}")
-            raise
+            logger.error(f"Error loading stations: {str(e)}")
     
-    def load_stations(self, stations: List[Dict]):
-        """Load station data into database"""
+    def load_departures(self, departures):
+        """Load departure data into BigQuery"""
+        if not departures:
+            logger.warning("No departure data to load")
+            return
+        
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                
-                for station in stations:
-                    cursor.execute('''
-                    INSERT OR REPLACE INTO stations (
-                        station_id, name, latitude, longitude,
-                        address, city, county, state, zipcode, extracted_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        station['station_id'],
-                        station['name'],
-                        station['latitude'],
-                        station['longitude'],
-                        station['address'],
-                        station['city'],
-                        station['county'],
-                        station['state'],
-                        station['zipcode'],
-                        station['extracted_at']
-                    ))
-                
-                conn.commit()
-                logger.info(f"Successfully loaded {len(stations)} stations")
+            # Prepare data for BigQuery
+            rows_to_insert = []
+            for departure in departures:
+                # Map to match your existing schema
+                rows_to_insert.append({
+                    'timestamp': departure.get('timestamp', datetime.now()),
+                    'station': departure.get('station_id'),
+                    'destination': departure.get('destination'),
+                    'minutes': departure.get('estimated_minutes'),
+                    'platform': departure.get('platform'),
+                    'direction': departure.get('direction'),
+                    'delay': departure.get('delay'),
+                    'length': departure.get('length')
+                })
+            
+            # Load data into BigQuery
+            errors = self.client.insert_rows_json(
+                self.departures_table_id, 
+                rows_to_insert
+            )
+            
+            if errors:
+                logger.error(f"Errors loading departures: {errors}")
+            else:
+                logger.info(f"Loaded {len(rows_to_insert)} departures into BigQuery")
                 
         except Exception as e:
-            logger.error(f"Error loading station data: {str(e)}")
-            raise
+            logger.error(f"Error loading departures: {str(e)}")
     
-    def load_departures(self, departures: List[Dict]):
-        """Load departure data into database"""
+    def load_metrics(self, metrics):
+        """Load metrics data into BigQuery"""
+        if not metrics:
+            logger.warning("No metrics data to load")
+            return
+        
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                
-                for departure in departures:
-                    cursor.execute('''
-                    INSERT INTO departures (
-                        station_id, destination, direction, minutes,
-                        platform, line_color, length, bikes_allowed,
-                        delay, extracted_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        departure['station_id'],
-                        departure['destination'],
-                        departure['direction'],
-                        departure['minutes'],
-                        departure['platform'],
-                        departure['line_color'],
-                        departure['length'],
-                        departure['bikes_allowed'],
-                        departure['delay'],
-                        departure['extracted_at']
-                    ))
-                
-                conn.commit()
-                logger.info(f"Successfully loaded {len(departures)} departures")
-                
-        except Exception as e:
-            logger.error(f"Error loading departure data: {str(e)}")
-            raise
-    
-    def load_metrics(self, metrics: Dict):
-        """Load metrics data into database"""
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                
-                # Convert direction_counts to JSON string if it exists
-                direction_counts = json.dumps(metrics.get('direction_counts', {}))
-                
-                cursor.execute('''
-                INSERT INTO metrics (
-                    total_departures, avg_delay, max_delay,
-                    delayed_trains, delay_rate, bikes_allowed_rate,
-                    avg_train_length, direction_counts, calculated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    metrics['total_departures'],
-                    metrics['avg_delay'],
-                    metrics['max_delay'],
-                    metrics['delayed_trains'],
-                    metrics['delay_rate'],
-                    metrics['bikes_allowed_rate'],
-                    metrics['avg_train_length'],
-                    direction_counts,
-                    metrics['calculated_at']
-                ))
-                
-                conn.commit()
-                logger.info("Successfully loaded metrics")
+            # Prepare data for BigQuery
+            rows_to_insert = []
+            for metric in metrics:
+                rows_to_insert.append({
+                    'date': metric.get('date'),
+                    'total_trains': metric.get('total_trains'),
+                    'avg_delay': metric.get('avg_delay'),
+                    'delayed_trains': metric.get('delayed_trains')
+                })
+            
+            # Load data into BigQuery
+            errors = self.client.insert_rows_json(
+                self.metrics_table_id, 
+                rows_to_insert
+            )
+            
+            if errors:
+                logger.error(f"Errors loading metrics: {errors}")
+            else:
+                logger.info(f"Loaded {len(rows_to_insert)} metrics into BigQuery")
                 
         except Exception as e:
             logger.error(f"Error loading metrics: {str(e)}")
-            raise
 
 if __name__ == "__main__":
     # Test the loader
