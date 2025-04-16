@@ -9,7 +9,7 @@ import os
 import sqlite3
 from datetime import datetime
 from etl.extractor import BartDataExtractor
-from etl.transformer import BartTransformer
+from etl.transformer import BartDataTransformer
 
 # Configure logging
 logging.basicConfig(
@@ -94,7 +94,7 @@ def run_etl_job():
     try:
         # Initialize components
         extractor = BartDataExtractor()
-        transformer = BartTransformer()
+        transformer = BartDataTransformer()
         
         # Initialize SQLite database
         init_sqlite_db()
