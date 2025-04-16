@@ -1,123 +1,188 @@
 import React, { useEffect, useState } from 'react';
-import { Departure } from '../types/bart';
-import { getStations, getDepartures } from '../services/bartService';
-import { DepartureCharts } from './DepartureCharts';
+import { 
+  Container, 
+  Typography, 
+  Select, 
+  MenuItem, 
+  FormControl, 
+  InputLabel,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  CircularProgress,
+  Alert,
+  Chip,
+  Box
+} from '@mui/material';
+import { Departure, Station } from '../types/bart';
+import { getDepartures, getStations } from '../services/bartService';
 
-export const DepartureBoard: React.FC = () => {
-  const [stations, setStations] = useState<string[]>([]);
-  const [selectedStation, setSelectedStation] = useState<string>('');
+function DepartureBoard() {
   const [departures, setDepartures] = useState<Departure[]>([]);
-  const [error, setError] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [stations, setStations] = useState<Station[]>([]);
+  const [selectedStation, setSelectedStation] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  // Load stations on component mount
   useEffect(() => {
-    const fetchStations = async () => {
+    const loadStations = async () => {
       try {
         const stationList = await getStations();
         setStations(stationList);
         if (stationList.length > 0) {
-          setSelectedStation(stationList[0]);
+          setSelectedStation(stationList[0].abbr);
         }
       } catch (err) {
         setError('Failed to load stations');
+        console.error(err);
       }
     };
-    fetchStations();
+    loadStations();
   }, []);
 
+  // Load departures when station is selected
   useEffect(() => {
-    const fetchDepartures = async () => {
+    const loadDepartures = async () => {
       if (!selectedStation) return;
+      
       try {
-        setIsLoading(true);
+        setLoading(true);
         const departureList = await getDepartures(selectedStation);
         setDepartures(departureList);
-        setLastUpdated(new Date());
-        setError('');
+        setError(null);
       } catch (err) {
-        setError('Failed to load departures');
+        setError('Failed to fetch departure data');
+        console.error(err);
       } finally {
-        setIsLoading(false);
+        setLoading(false);
       }
     };
 
-    // Initial fetch
-    fetchDepartures();
-
-    // Set up polling every 2 minutes (120000 ms)
-    const interval = setInterval(fetchDepartures, 120000);
+    loadDepartures();
+    // Refresh data every 30 seconds
+    const interval = setInterval(loadDepartures, 30000);
     return () => clearInterval(interval);
   }, [selectedStation]);
 
+  const getColorStyle = (color: string) => {
+    const colorMap: { [key: string]: string } = {
+      'YELLOW': '#ffff33',
+      'ORANGE': '#ff9933',
+      'BLUE': '#0099cc',
+      'GREEN': '#009933',
+      'RED': '#cc0000'
+    };
+    return {
+      backgroundColor: colorMap[color] || '#ffffff',
+      color: color === 'YELLOW' ? '#000000' : '#ffffff',
+      fontWeight: 'bold'
+    };
+  };
+
+  const selectedStationInfo = stations.find(s => s.abbr === selectedStation);
+
   return (
-    <div className="p-4">
-      <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold">BART Departures</h1>
-        {lastUpdated && (
-          <span className="text-sm text-gray-500">
-            Last updated: {lastUpdated.toLocaleTimeString()}
-          </span>
-        )}
-      </div>
-      
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700">Select Station:</label>
-        <select
+    <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Typography variant="h4" component="h1" gutterBottom>
+        BART Departures
+      </Typography>
+
+      <FormControl fullWidth sx={{ mb: 4 }}>
+        <InputLabel id="station-select-label">Select Station</InputLabel>
+        <Select
+          labelId="station-select-label"
           value={selectedStation}
+          label="Select Station"
           onChange={(e) => setSelectedStation(e.target.value)}
-          className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-          disabled={isLoading}
         >
           {stations.map((station) => (
-            <option key={station} value={station}>
-              {station}
-            </option>
+            <MenuItem key={station.abbr} value={station.abbr}>
+              {station.name} ({station.abbr})
+            </MenuItem>
           ))}
-        </select>
-      </div>
+        </Select>
+      </FormControl>
 
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
-          {error}
-        </div>
+      {selectedStationInfo && selectedStationInfo.address && (
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle1">
+            {selectedStationInfo.address}
+            {selectedStationInfo.city && `, ${selectedStationInfo.city}`}
+            {selectedStationInfo.state && `, ${selectedStationInfo.state}`}
+            {selectedStationInfo.zipcode && ` ${selectedStationInfo.zipcode}`}
+          </Typography>
+        </Box>
       )}
 
-      {isLoading && (
-        <div className="text-center py-4">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-300 border-t-indigo-600"></div>
-          <p className="mt-2 text-sm text-gray-500">Updating departure information...</p>
-        </div>
+      {loading ? (
+        <Box display="flex" justifyContent="center" my={4}>
+          <CircularProgress />
+        </Box>
+      ) : error ? (
+        <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+      ) : departures.length === 0 ? (
+        <Alert severity="info" sx={{ mb: 2 }}>No departures found for this station.</Alert>
+      ) : (
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Destination</TableCell>
+                <TableCell>Direction</TableCell>
+                <TableCell>Minutes</TableCell>
+                <TableCell>Platform</TableCell>
+                <TableCell>Train Info</TableCell>
+                <TableCell>Bikes</TableCell>
+                <TableCell>Delay</TableCell>
+                <TableCell>Time</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {departures.map((departure, index) => (
+                <TableRow key={index}>
+                  <TableCell>{departure.destination}</TableCell>
+                  <TableCell>{departure.direction}</TableCell>
+                  <TableCell>{departure.minutes}</TableCell>
+                  <TableCell>{departure.platform}</TableCell>
+                  <TableCell>
+                    <Chip 
+                      label={`${departure.color || 'Unknown'} - ${departure.length || '?'} cars`}
+                      style={getColorStyle(departure.color || '')}
+                      size="small"
+                    />
+                  </TableCell>
+                  <TableCell>{departure.bike_flag ? 'Yes' : 'No'}</TableCell>
+                  <TableCell>
+                    {departure.delay > 0 ? (
+                      <Chip 
+                        label={`${departure.delay} min delay`}
+                        color="error"
+                        size="small"
+                      />
+                    ) : (
+                      <Chip 
+                        label="On time"
+                        color="success"
+                        size="small"
+                      />
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {departure.timestamp ? new Date(departure.timestamp).toLocaleTimeString() : 'N/A'}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
       )}
-
-      <DepartureCharts departures={departures} />
-
-      <div className="overflow-x-auto mt-4">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Destination</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Direction</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Minutes</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Platform</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bike Flag</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Delay</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {departures.map((departure, index) => (
-              <tr key={index}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{departure.destination}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{departure.direction}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{departure.minutes}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{departure.platform}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{departure.bike_flag ? 'Yes' : 'No'}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{departure.delay} min</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    </Container>
   );
-}; 
+}
+
+export default DepartureBoard; 

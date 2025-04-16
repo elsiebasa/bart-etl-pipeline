@@ -1,19 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Container,
-  Grid,
+import React, { useEffect, useState } from 'react';
+import { 
+  Container, 
+  Typography, 
   Paper,
-  Typography,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Box,
+  CircularProgress,
+  Alert,
   Select,
   MenuItem,
   FormControl,
-  InputLabel,
-  CircularProgress,
-  Box
+  InputLabel
 } from '@mui/material';
 import {
-  LineChart,
-  Line,
   BarChart,
   Bar,
   XAxis,
@@ -21,217 +25,156 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell
+  ResponsiveContainer
 } from 'recharts';
+import { getDepartures, getStations } from '../services/bartService';
+import { Departure, Station } from '../types/bart';
 
-interface DailyStats {
-  date: string;
-  station: string;
-  total_departures: number;
-  total_delays: number;
-  avg_delay_minutes: number;
+interface DelayDataPoint {
+  time: string;
+  delay: number;
 }
 
-interface DelayPattern {
-  hour: number;
-  station: string;
-  avg_delay: number;
-  total_trains: number;
-}
-
-interface StationStats {
-  destination: string;
-  total_departures: number;
-  avg_delay_minutes: number;
-  delay_count: number;
-}
-
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
-
-const BartAnalytics: React.FC = () => {
-  const [loading, setLoading] = useState(true);
-  const [selectedStation, setSelectedStation] = useState('12th St. Oakland City Center');
-  const [days, setDays] = useState(7);
-  const [dailyStats, setDailyStats] = useState<DailyStats[]>([]);
-  const [delayPatterns, setDelayPatterns] = useState<DelayPattern[]>([]);
-  const [stationStats, setStationStats] = useState<StationStats[]>([]);
+function BartAnalytics() {
+  const [departures, setDepartures] = useState<Departure[]>([]);
+  const [stations, setStations] = useState<Station[]>([]);
+  const [selectedStation, setSelectedStation] = useState<string>('12TH');
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
+    const loadStations = async () => {
       try {
-        // Fetch daily stats
-        const dailyResponse = await fetch(`/api/analytics/daily?days=${days}`);
-        const dailyData = await dailyResponse.json();
-        setDailyStats(dailyData);
-
-        // Fetch delay patterns
-        const delayResponse = await fetch(`/api/analytics/delays?days=${days}`);
-        const delayData = await delayResponse.json();
-        setDelayPatterns(delayData);
-
-        // Fetch station stats
-        const stationResponse = await fetch(`/api/analytics/station?station=${encodeURIComponent(selectedStation)}&days=${days}`);
-        const stationData = await stationResponse.json();
-        setStationStats(stationData);
-      } catch (error) {
-        console.error('Error fetching analytics:', error);
+        const stationData = await getStations();
+        setStations(stationData);
+      } catch (err) {
+        console.error('Failed to load stations:', err);
       }
-      setLoading(false);
+    };
+    loadStations();
+  }, []);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        const data = await getDepartures(selectedStation);
+        setDepartures(data);
+        setError(null);
+      } catch (err) {
+        setError('Failed to load departure data');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
     };
 
-    fetchData();
-  }, [selectedStation, days]);
+    loadData();
+    // Refresh every 30 seconds
+    const interval = setInterval(loadData, 30000);
+    return () => clearInterval(interval);
+  }, [selectedStation]);
 
-  if (loading) {
+  // Transform departure data for the delay chart
+  const delayData: DelayDataPoint[] = departures.map((d) => ({
+    time: d.timestamp && typeof d.timestamp === 'string' 
+      ? new Date(d.timestamp).toLocaleTimeString() 
+      : 'Unknown',
+    delay: d.delay || 0
+  }));
+
+  if (loading && !departures.length) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
+      <Box display="flex" justifyContent="center" my={4}>
         <CircularProgress />
       </Box>
     );
   }
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Grid container spacing={3}>
-        {/* Controls */}
-        <Grid item xs={12}>
-          <Paper sx={{ p: 2, display: 'flex', gap: 2 }}>
-            <FormControl sx={{ minWidth: 200 }}>
-              <InputLabel>Station</InputLabel>
-              <Select
-                value={selectedStation}
-                label="Station"
-                onChange={(e) => setSelectedStation(e.target.value)}
-              >
-                <MenuItem value="12th St. Oakland City Center">12th St. Oakland City Center</MenuItem>
-                <MenuItem value="16th St. Mission">16th St. Mission</MenuItem>
-                <MenuItem value="19th St. Oakland">19th St. Oakland</MenuItem>
-                <MenuItem value="24th St. Mission">24th St. Mission</MenuItem>
-              </Select>
-            </FormControl>
-            <FormControl sx={{ minWidth: 120 }}>
-              <InputLabel>Days</InputLabel>
-              <Select
-                value={days}
-                label="Days"
-                onChange={(e) => setDays(Number(e.target.value))}
-              >
-                <MenuItem value={7}>Last 7 days</MenuItem>
-                <MenuItem value={14}>Last 14 days</MenuItem>
-                <MenuItem value={30}>Last 30 days</MenuItem>
-              </Select>
-            </FormControl>
-          </Paper>
-        </Grid>
+    <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Typography variant="h4" gutterBottom sx={{ color: '#000000' }}>
+        BART Departures Analytics
+      </Typography>
 
-        {/* Daily Departures Chart */}
-        <Grid item xs={12}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Daily Departures
-            </Typography>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={dailyStats}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="total_departures" stroke="#8884d8" />
-              </LineChart>
-            </ResponsiveContainer>
-          </Paper>
-        </Grid>
+      {/* Station Selector */}
+      <Paper sx={{ mb: 4, p: 2, backgroundColor: '#ffffff' }}>
+        <FormControl fullWidth>
+          <InputLabel id="station-select-label" sx={{ color: '#000000' }}>Select Station</InputLabel>
+          <Select
+            labelId="station-select-label"
+            value={selectedStation}
+            onChange={(e) => setSelectedStation(e.target.value)}
+            sx={{ color: '#000000' }}
+          >
+            {stations.map((station) => (
+              <MenuItem key={station.abbr} value={station.abbr}>
+                {station.name}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Paper>
 
-        {/* Delay Analysis */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Daily Delays
-            </Typography>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={dailyStats}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="total_delays" fill="#82ca9d" />
-              </BarChart>
-            </ResponsiveContainer>
-          </Paper>
-        </Grid>
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Average Delay Duration
-            </Typography>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={dailyStats}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="avg_delay_minutes" stroke="#ff7300" />
-              </LineChart>
-            </ResponsiveContainer>
-          </Paper>
-        </Grid>
+      {/* Recent Departures Table */}
+      <Paper sx={{ mb: 4, backgroundColor: '#ffffff' }}>
+        <Typography variant="h6" sx={{ p: 2, color: '#000000' }}>
+          Recent Departures
+        </Typography>
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ color: '#000000', fontWeight: 'bold' }}>Time</TableCell>
+                <TableCell sx={{ color: '#000000', fontWeight: 'bold' }}>Destination</TableCell>
+                <TableCell sx={{ color: '#000000', fontWeight: 'bold' }}>Minutes</TableCell>
+                <TableCell sx={{ color: '#000000', fontWeight: 'bold' }}>Platform</TableCell>
+                <TableCell sx={{ color: '#000000', fontWeight: 'bold' }}>Direction</TableCell>
+                <TableCell sx={{ color: '#000000', fontWeight: 'bold' }}>Train Info</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {departures.map((departure, index) => (
+                <TableRow key={index}>
+                  <TableCell sx={{ color: '#000000' }}>
+                    {departure.timestamp && typeof departure.timestamp === 'string'
+                      ? new Date(departure.timestamp).toLocaleString()
+                      : 'Unknown'}
+                  </TableCell>
+                  <TableCell sx={{ color: '#000000' }}>{departure.destination}</TableCell>
+                  <TableCell sx={{ color: '#000000' }}>{departure.minutes} min</TableCell>
+                  <TableCell sx={{ color: '#000000' }}>Platform {departure.platform}</TableCell>
+                  <TableCell sx={{ color: '#000000' }}>{departure.direction}</TableCell>
+                  <TableCell sx={{ color: '#000000' }}>{departure.length} cars</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Paper>
 
-        {/* Station Analysis */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Departures by Destination
-            </Typography>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={stationStats}
-                  dataKey="total_departures"
-                  nameKey="destination"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={100}
-                  label
-                >
-                  {stationStats.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Average Delay by Destination
-            </Typography>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={stationStats}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="destination" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="avg_delay_minutes" fill="#8884d8" />
-              </BarChart>
-            </ResponsiveContainer>
-          </Paper>
-        </Grid>
-      </Grid>
+      {/* Delay Chart */}
+      <Paper sx={{ p: 2, backgroundColor: '#ffffff' }}>
+        <Typography variant="h6" sx={{ color: '#000000' }} gutterBottom>
+          Delays Over Time
+        </Typography>
+        <Box sx={{ height: 300 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={delayData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="time" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="delay" fill="#8884d8" name="Delay (minutes)" />
+            </BarChart>
+          </ResponsiveContainer>
+        </Box>
+      </Paper>
     </Container>
   );
-};
+}
 
 export default BartAnalytics; 
