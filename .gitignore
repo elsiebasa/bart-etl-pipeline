@@ -25,6 +25,10 @@ node_modules/
 npm-debug.log
 yarn-debug.log
 yarn-error.log
+**/node_modules/.cache/
+
+# BART Data
+BART_Open_Source_System_Map_API_*.zip
 
 # Environment variables
 .env
