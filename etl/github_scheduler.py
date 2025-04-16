@@ -8,7 +8,7 @@ import logging
 import os
 import sqlite3
 from datetime import datetime
-from etl.extractor import BartExtractor
+from etl.extractor import BartDataExtractor
 from etl.transformer import BartTransformer
 
 # Configure logging
@@ -93,7 +93,7 @@ def run_etl_job():
     """
     try:
         # Initialize components
-        extractor = BartExtractor()
+        extractor = BartDataExtractor()
         transformer = BartTransformer()
         
         # Initialize SQLite database
@@ -108,7 +108,7 @@ def run_etl_job():
             try:
                 # Extract departures
                 logger.info(f"Processing station: {station['name']}")
-                departures = extractor.get_departures(station['abbr'])
+                departures = extractor.get_departures(station['station_id'])
                 
                 # Transform data
                 transformed_data = transformer.transform_departures(departures)
