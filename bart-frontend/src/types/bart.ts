@@ -1,12 +1,12 @@
 export interface Departure {
-    station: string;
     destination: string;
     direction: string;
     minutes: number;
     platform: string;
-    bike_flag: string;
+    bike_flag: boolean;
     delay: number;
-    retrieved_at: string;
+    color: string;
+    length: number;
 }
 
 export interface ApiResponse {
