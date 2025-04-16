@@ -57,7 +57,9 @@ jobs:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
     
     - name: Run ETL job
-      run: python etl/github_scheduler.py
+      run: |
+        export PYTHONPATH=$PYTHONPATH:$(pwd)
+        python etl/github_scheduler.py
       env:
         DATABASE_PATH: data/bart_history.db
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
