@@ -4,14 +4,12 @@ BART ETL Scheduler for GitHub Actions
 This script runs the ETL job once and exits, suitable for GitHub Actions.
 """
 
-import os
 import logging
+import os
+import sqlite3
 from datetime import datetime
-import json
-
-from extract import BartDataExtractor
-from transform import BartDataTransformer
-from load import BartDataLoader
+from etl.extractor import BartExtractor
+from etl.transformer import BartTransformer
 
 # Configure logging
 logging.basicConfig(
@@ -20,66 +18,129 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def init_sqlite_db():
+    """Initialize SQLite database if it doesn't exist"""
+    db_path = os.environ.get('DATABASE_PATH', 'data/bart_history.db')
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    
+    # Create tables if they don't exist
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS departures (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            station TEXT,
+            destination TEXT,
+            platform TEXT,
+            minutes INTEGER,
+            direction TEXT,
+            color TEXT,
+            length INTEGER,
+            bike_flag INTEGER,
+            delay INTEGER,
+            timestamp DATETIME,
+            date DATE
+        )
+    ''')
+    
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS daily_stats (
+            date DATE PRIMARY KEY,
+            total_departures INTEGER,
+            total_delays INTEGER,
+            avg_delay_minutes REAL
+        )
+    ''')
+    
+    conn.commit()
+    conn.close()
+
+def store_in_sqlite(transformed_data):
+    """Store data in SQLite database"""
+    db_path = os.environ.get('DATABASE_PATH', 'data/bart_history.db')
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    
+    now = datetime.now()
+    date = now.date()
+    
+    for data in transformed_data:
+        c.execute('''
+            INSERT INTO departures (
+                station, destination, platform, minutes, direction,
+                color, length, bike_flag, delay, timestamp, date
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            data['station'],
+            data['destination'],
+            data['platform'],
+            data['minutes'],
+            data['direction'],
+            data['color'],
+            data['length'],
+            data['bike_flag'],
+            data['delay'],
+            now,
+            date
+        ))
+    
+    conn.commit()
+    conn.close()
+
 def run_etl_job():
-    """Run one complete ETL job"""
+    """
+    Run the BART ETL job once and exit.
+    This version is designed for GitHub Actions.
+    """
     try:
-        logger.info("Starting BART ETL job")
-        start_time = datetime.now()
+        # Initialize components
+        extractor = BartExtractor()
+        transformer = BartTransformer()
         
-        # Initialize ETL components
-        extractor = BartDataExtractor()
-        transformer = BartDataTransformer()
-        loader = BartDataLoader()
-        
-        # 1. Extract and load stations (daily)
-        logger.info("Extracting station data")
+        # Initialize SQLite database
+        init_sqlite_db()
+
+        # Extract station data
+        logger.info("Extracting station data...")
         stations = extractor.get_stations()
-        cleaned_stations = transformer.clean_station_data(stations)
-        loader.load_stations(cleaned_stations)
         
-        # 2. Extract and load departures for all stations
-        logger.info("Extracting departure data for all stations")
-        all_departures = []
-        
+        # Process each station
         for station in stations:
             try:
-                logger.info(f"Processing station {station['station_id']}")
-                departures = extractor.get_departures(station['station_id'])
-                cleaned_departures = transformer.clean_departure_data(departures)
-                all_departures.extend(cleaned_departures)
-                loader.load_departures(cleaned_departures)
+                # Extract departures
+                logger.info(f"Processing station: {station['name']}")
+                departures = extractor.get_departures(station['abbr'])
+                
+                # Transform data
+                transformed_data = transformer.transform_departures(departures)
+                
+                # Store in SQLite
+                store_in_sqlite(transformed_data)
+                
+                logger.info(f"Successfully processed station: {station['name']}")
+                
             except Exception as e:
-                logger.error(f"Error processing station {station['station_id']}: {str(e)}")
+                logger.error(f"Error processing station {station['name']}: {str(e)}")
                 continue
-        
-        # 3. Calculate and load metrics
-        if all_departures:
-            logger.info("Calculating metrics")
-            metrics = transformer.calculate_metrics(all_departures)
-            loader.load_metrics(metrics)
-        
-        end_time = datetime.now()
-        duration = (end_time - start_time).total_seconds()
-        logger.info(f"ETL job completed in {duration:.2f} seconds")
-        
+
+        logger.info("ETL job completed successfully")
         return {
-            'status': 'success',
-            'message': f'ETL job completed in {duration:.2f} seconds',
-            'stations_processed': len(stations),
-            'departures_processed': len(all_departures)
+            "status": "success",
+            "timestamp": datetime.now().isoformat(),
+            "processed_stations": len(stations)
         }
         
     except Exception as e:
-        logger.error(f"Error in ETL job: {str(e)}")
+        logger.error(f"ETL job failed: {str(e)}")
         return {
-            'status': 'error',
-            'message': str(e)
+            "status": "error",
+            "timestamp": datetime.now().isoformat(),
+            "error": str(e)
         }
 
 if __name__ == "__main__":
     # Create data directory if it doesn't exist
-    os.makedirs('data', exist_ok=True)
+    os.makedirs("data", exist_ok=True)
     
-    # Run the ETL job once
+    # Run the ETL job
     result = run_etl_job()
-    print(json.dumps(result, indent=2)) 
+    print(result) 

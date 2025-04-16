@@ -1,11 +1,13 @@
 import sqlite3
 from datetime import datetime, timedelta
 import json
+import os
 
 class BARTDataStore:
-    def __init__(self, db_path='bart_history.db'):
-        self.db_path = db_path
+    def __init__(self):
+        self.db_path = os.environ.get('DATABASE_PATH', 'bart_history.db')
         self.init_db()
+        self.cleanup_old_data(days_to_keep=5)  # Automatically clean up old data on init
 
     def init_db(self):
         """Initialize the database with required tables"""
@@ -50,6 +52,9 @@ class BARTDataStore:
         now = datetime.now()
         date = now.date()
         
+        # Clean up old data before storing new data
+        self.cleanup_old_data(days_to_keep=5)
+        
         c.execute('''
             INSERT INTO departures (
                 station, destination, platform, minutes, direction,
@@ -72,13 +77,13 @@ class BARTDataStore:
         conn.commit()
         conn.close()
 
-    def get_daily_stats(self, days=10):
-        """Get statistics for the last N days"""
+    def get_daily_stats(self, days=5):
+        """Get statistics for the last 5 days"""
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
         
         end_date = datetime.now().date()
-        start_date = end_date - timedelta(days=days)
+        start_date = end_date - timedelta(days=min(days, 5))  # Ensure max 5 days
         
         c.execute('''
             SELECT date, COUNT(*) as total_departures,
@@ -100,13 +105,13 @@ class BARTDataStore:
             'avg_delay_minutes': row[3]
         } for row in stats]
 
-    def get_station_stats(self, station, days=10):
-        """Get statistics for a specific station"""
+    def get_station_stats(self, station, days=5):
+        """Get statistics for a specific station (max 5 days)"""
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
         
         end_date = datetime.now().date()
-        start_date = end_date - timedelta(days=days)
+        start_date = end_date - timedelta(days=min(days, 5))  # Ensure max 5 days
         
         c.execute('''
             SELECT 
@@ -130,8 +135,8 @@ class BARTDataStore:
             'delay_count': row[3]
         } for row in stats]
 
-    def cleanup_old_data(self, days_to_keep=30):
-        """Remove data older than specified days"""
+    def cleanup_old_data(self, days_to_keep=5):
+        """Remove data older than 5 days"""
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
         
