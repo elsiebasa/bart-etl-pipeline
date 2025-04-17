@@ -80,3 +80,4 @@ jobs:
       env:
         DATABASE_PATH: data/bart_history.db
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+        STORAGE_BUCKET: ${{ secrets.GCP_STORAGE_BUCKET }}
