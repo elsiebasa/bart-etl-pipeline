@@ -100,17 +100,14 @@ def get_station_analytics():
         # Get station stats for the last 7 days
         cursor.execute('''
         SELECT 
-            s.name,
-            s.abbr,
-            ds.date,
-            ds.total_departures,
-            ds.delayed_departures,
-            ds.avg_delay_minutes,
-            ds.max_delay_minutes
-        FROM daily_stats ds
-        JOIN stations s ON ds.station_id = s.id
-        WHERE ds.date >= date('now', '-7 days')
-        ORDER BY s.name, ds.date DESC
+            d.destination,
+            COUNT(*) as total_departures,
+            COUNT(CASE WHEN d.delay > 0 THEN 1 END) as delayed_trains,
+            COALESCE(AVG(CASE WHEN d.delay > 0 THEN d.delay ELSE NULL END), 0) as avg_delay_minutes
+        FROM departures d
+        WHERE d.timestamp >= datetime('now', '-7 days')
+        GROUP BY d.destination
+        ORDER BY total_departures DESC
         ''')
         
         stats = cursor.fetchall()
@@ -120,13 +117,18 @@ def get_station_analytics():
         analytics = []
         for stat in stats:
             analytics.append({
-                'station_name': stat[0],
-                'station_id': stat[1],
-                'date': stat[2],
-                'total_departures': stat[3],
-                'delayed_departures': stat[4],
-                'avg_delay_minutes': stat[5],
-                'max_delay_minutes': stat[6]
+                'destination': stat[0] or 'Unknown',
+                'total_departures': stat[1] or 0,
+                'delayed_trains': stat[2] or 0,
+                'avg_delay_minutes': float(stat[3] or 0)
+            })
+        
+        # If no data found, return empty array with success status
+        if not analytics:
+            return jsonify({
+                "status": "No data available",
+                "timestamp": datetime.now().isoformat(),
+                "data": []
             })
         
         return jsonify({
@@ -136,6 +138,7 @@ def get_station_analytics():
         })
         
     except Exception as e:
+        print(f"Error in get_station_analytics: {str(e)}")  # Add logging
         return jsonify({
             "status": "Error",
             "timestamp": datetime.now().isoformat(),

@@ -31,16 +31,17 @@ class BartDatabase:
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS departures (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            station_id TEXT NOT NULL,
+            station TEXT NOT NULL,
             destination TEXT NOT NULL,
-            direction TEXT NOT NULL,
-            minutes INTEGER NOT NULL,
             platform TEXT,
-            length INTEGER,
+            minutes INTEGER NOT NULL,
+            direction TEXT NOT NULL,
             color TEXT,
-            bikes INTEGER,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (station_id) REFERENCES stations(id)
+            length INTEGER,
+            bike_flag INTEGER,
+            delay INTEGER DEFAULT 0,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            date DATE
         )
         ''')
         
@@ -82,8 +83,8 @@ class BartDatabase:
         cursor = self.conn.cursor()
         cursor.execute('''
         INSERT INTO departures 
-        (station_id, destination, direction, minutes, platform, length, color, bikes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (station_id, destination, direction, minutes, platform, length, color, bikes, delay, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             departure_data['station_id'],
             departure_data['destination'],
@@ -92,7 +93,9 @@ class BartDatabase:
             departure_data.get('platform'),
             departure_data.get('length'),
             departure_data.get('color'),
-            departure_data.get('bikes')
+            departure_data.get('bikes'),
+            departure_data.get('delay', 0),
+            datetime.now().isoformat()
         ))
         self.conn.commit()
     
