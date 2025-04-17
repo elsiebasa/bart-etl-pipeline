@@ -108,11 +108,11 @@ class BartDatabase:
         cursor.execute('''
         SELECT 
             COUNT(*) as total,
-            SUM(CASE WHEN minutes > 0 THEN 1 ELSE 0 END) as delayed,
-            AVG(CASE WHEN minutes > 0 THEN minutes ELSE NULL END) as avg_delay,
-            MAX(CASE WHEN minutes > 0 THEN minutes ELSE 0 END) as max_delay
+            SUM(CASE WHEN delay > 0 THEN 1 ELSE 0 END) as delayed,
+            AVG(CASE WHEN delay > 0 THEN delay ELSE NULL END) as avg_delay,
+            MAX(CASE WHEN delay > 0 THEN delay ELSE 0 END) as max_delay
         FROM departures
-        WHERE station_id = ? AND date(created_at) = ?
+        WHERE station_id = ? AND date = ?
         ''', (station_id, date))
         
         stats = cursor.fetchone()
