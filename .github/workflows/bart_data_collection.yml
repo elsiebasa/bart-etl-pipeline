@@ -8,6 +8,8 @@ on:
 jobs:
   collect_data:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     
     steps:
     - uses: actions/checkout@v2
@@ -20,16 +22,18 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install flask==2.0.1 werkzeug==2.0.1 flask-cors requests
+        pip install flask==2.0.1 werkzeug==2.0.3 flask-cors requests
     
     - name: Run data collection
       run: |
         python etl/github_scheduler.py
     
     - name: Commit and push if changed
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
         git add data/bart.db
         git commit -m "Update BART data" || exit 0
         git push 
