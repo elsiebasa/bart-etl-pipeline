@@ -6,7 +6,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         "flask==2.0.1",
-        "werkzeug==2.0.3",
+        "werkzeug==2.0.1",
         "requests==2.31.0",
         "pandas==2.1.4",
         "flask-cors==4.0.0",
