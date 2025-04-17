@@ -23,7 +23,7 @@ export const getDepartures = async (stationAbbr: string): Promise<Departure[]> =
       throw new Error('Failed to fetch departures');
     }
     const data = await response.json();
-    return data || [];
+    return data.departures || [];
   } catch (error) {
     console.error('Error fetching departures:', error);
     throw error;
@@ -37,7 +37,7 @@ export const getDailyAnalytics = async () => {
       throw new Error('Failed to fetch daily analytics');
     }
     const data = await response.json();
-    return data || [];
+    return data.data || [];
   } catch (error) {
     console.error('Error fetching daily analytics:', error);
     throw error;
@@ -51,7 +51,7 @@ export const getStationAnalytics = async () => {
       throw new Error('Failed to fetch station analytics');
     }
     const data = await response.json();
-    return data || [];
+    return data.data || [];
   } catch (error) {
     console.error('Error fetching station analytics:', error);
     throw error;

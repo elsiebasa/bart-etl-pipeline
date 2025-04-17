@@ -1,15 +1,7 @@
-#!/usr/bin/env python3
-"""
-BART ETL Scheduler for GitHub Actions
-This script runs the ETL job once and exits, suitable for GitHub Actions.
-"""
-
-import logging
-import os
-import sqlite3
+import requests
 from datetime import datetime
-from etl.extractor import BartDataExtractor
-from etl.transformer import BartDataTransformer
+import logging
+from database import BartDatabase
 
 # Configure logging
 logging.basicConfig(
@@ -18,129 +10,106 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def init_sqlite_db():
-    """Initialize SQLite database if it doesn't exist"""
-    db_path = os.environ.get('DATABASE_PATH', 'data/bart_history.db')
-    conn = sqlite3.connect(db_path)
-    c = conn.cursor()
-    
-    # Create tables if they don't exist
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS departures (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            station TEXT,
-            destination TEXT,
-            platform TEXT,
-            minutes INTEGER,
-            direction TEXT,
-            color TEXT,
-            length INTEGER,
-            bike_flag INTEGER,
-            delay INTEGER,
-            timestamp DATETIME,
-            date DATE
-        )
-    ''')
-    
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS daily_stats (
-            date DATE PRIMARY KEY,
-            total_departures INTEGER,
-            total_delays INTEGER,
-            avg_delay_minutes REAL
-        )
-    ''')
-    
-    conn.commit()
-    conn.close()
+# BART API configuration
+BART_API_KEY = 'MW9S-E7SL-26DU-VV8V'  # Public test key
+BART_API_BASE_URL = 'http://api.bart.gov/api'
 
-def store_in_sqlite(transformed_data):
-    """Store data in SQLite database"""
-    db_path = os.environ.get('DATABASE_PATH', 'data/bart_history.db')
-    conn = sqlite3.connect(db_path)
-    c = conn.cursor()
-    
-    now = datetime.now()
-    date = now.date()
-    
-    for data in transformed_data:
-        c.execute('''
-            INSERT INTO departures (
-                station, destination, platform, minutes, direction,
-                color, length, bike_flag, delay, timestamp, date
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            data['station'],
-            data['destination'],
-            data['platform'],
-            data['minutes'],
-            data['direction'],
-            data['color'],
-            data['length'],
-            data['bike_flag'],
-            data['delay'],
-            now,
-            date
-        ))
-    
-    conn.commit()
-    conn.close()
-
-def run_etl_job():
-    """
-    Run the BART ETL job once and exit.
-    This version is designed for GitHub Actions.
-    """
+def get_stations():
+    """Fetch all BART stations"""
     try:
-        # Initialize components
-        extractor = BartDataExtractor()
-        transformer = BartDataTransformer()
+        response = requests.get(f'{BART_API_BASE_URL}/stn.aspx', params={
+            'cmd': 'stns',
+            'key': BART_API_KEY,
+            'json': 'y'
+        })
+        response.raise_for_status()
+        data = response.json()
         
-        # Initialize SQLite database
-        init_sqlite_db()
+        stations = []
+        for station in data['root']['stations']['station']:
+            stations.append({
+                'id': station['abbr'],
+                'name': station['name'],
+                'abbr': station['abbr'],
+                'city': station.get('city'),
+                'county': station.get('county'),
+                'state': station.get('state'),
+                'zipcode': station.get('zipcode')
+            })
+        
+        return stations
+    except Exception as e:
+        logger.error(f"Error fetching stations: {str(e)}")
+        return []
 
-        # Extract station data
-        logger.info("Extracting station data...")
-        stations = extractor.get_stations()
+def get_departures(station_id):
+    """Fetch departures for a specific station"""
+    try:
+        response = requests.get(f'{BART_API_BASE_URL}/etd.aspx', params={
+            'cmd': 'etd',
+            'orig': station_id,
+            'key': BART_API_KEY,
+            'json': 'y'
+        })
+        response.raise_for_status()
+        data = response.json()
         
-        # Process each station
+        departures = []
+        if 'root' in data and 'station' in data['root']:
+            station_data = data['root']['station'][0]
+            if 'etd' in station_data:
+                for etd in station_data['etd']:
+                    destination = etd['destination']
+                    for estimate in etd['estimate']:
+                        departure = {
+                            'station_id': station_id,
+                            'destination': destination,
+                            'direction': estimate['direction'],
+                            'minutes': int(estimate['minutes'] if estimate['minutes'] != 'Leaving' else '0'),
+                            'platform': estimate['platform'],
+                            'length': int(estimate['length']),
+                            'color': estimate['color'],
+                            'bikes': int(estimate['bikeflag'])
+                        }
+                        departures.append(departure)
+        
+        return departures
+    except Exception as e:
+        logger.error(f"Error fetching departures for station {station_id}: {str(e)}")
+        return []
+
+def main():
+    """Main ETL process"""
+    try:
+        # Initialize database
+        db = BartDatabase()
+        
+        # Get and save stations
+        logger.info("Fetching stations...")
+        stations = get_stations()
         for station in stations:
-            try:
-                # Extract departures
-                logger.info(f"Processing station: {station['name']}")
-                departures = extractor.get_departures(station['station_id'])
-                
-                # Transform data
-                transformed_data = transformer.transform_departures(departures)
-                
-                # Store in SQLite
-                store_in_sqlite(transformed_data)
-                
-                logger.info(f"Successfully processed station: {station['name']}")
-                
-            except Exception as e:
-                logger.error(f"Error processing station {station['name']}: {str(e)}")
-                continue
-
-        logger.info("ETL job completed successfully")
-        return {
-            "status": "success",
-            "timestamp": datetime.now().isoformat(),
-            "processed_stations": len(stations)
-        }
+            db.save_station(station)
+        logger.info(f"Saved {len(stations)} stations")
+        
+        # Get and save departures for each station
+        today = datetime.now().strftime('%Y-%m-%d')
+        for station in stations:
+            logger.info(f"Processing station: {station['name']}")
+            departures = get_departures(station['id'])
+            
+            for departure in departures:
+                db.save_departure(departure)
+            
+            # Update daily stats
+            db.update_daily_stats(station['id'], today)
+            logger.info(f"Saved {len(departures)} departures for {station['name']}")
+        
+        db.close()
+        logger.info("ETL process completed successfully")
         
     except Exception as e:
-        logger.error(f"ETL job failed: {str(e)}")
-        return {
-            "status": "error",
-            "timestamp": datetime.now().isoformat(),
-            "error": str(e)
-        }
+        logger.error(f"Error in ETL process: {str(e)}")
+        raise
 
-if __name__ == "__main__":
-    # Create data directory if it doesn't exist
-    os.makedirs("data", exist_ok=True)
-    
-    # Run the ETL job
-    result = run_etl_job()
-    print(result) 
+if __name__ == '__main__':
+    main() 
