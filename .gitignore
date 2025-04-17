@@ -20,15 +20,16 @@ var/
 .installed.cfg
 *.egg
 
-# Node.js
+# Node
 node_modules/
 npm-debug.log
 yarn-debug.log
 yarn-error.log
-**/node_modules/.cache/
 
-# BART Data
-BART_Open_Source_System_Map_API_*.zip
+# Database
+*.db
+*.sqlite
+*.sqlite3
 
 # Environment variables
 .env
@@ -36,6 +37,21 @@ BART_Open_Source_System_Map_API_*.zip
 .env.development.local
 .env.test.local
 .env.production.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+data/bart.db
+BART Open Source Map Daytime Service.ai
+*.zip
 
 # Google Cloud credentials
 service-account-key.json
@@ -48,16 +64,8 @@ service-account-key.json
 **/secrets
 
 # OS specific
-.DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
-ehthumbs.db
-Thumbs.db
-
-# IDE specific
-.idea/
-.vscode/
-*.swp
-*.swo 
+ehthumbs.db 
