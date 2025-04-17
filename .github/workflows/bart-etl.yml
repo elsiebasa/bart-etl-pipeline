@@ -27,46 +27,49 @@ jobs:
     - name: Create data directory
       run: mkdir -p data
     
-    - name: Initialize database if not exists
+    - name: Initialize database
       run: |
-        if [ ! -f data/bart_history.db ]; then
-          sqlite3 data/bart_history.db "CREATE TABLE IF NOT EXISTS stations (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            abbr TEXT NOT NULL,
-            city TEXT,
-            county TEXT,
-            state TEXT,
-            zipcode TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-          );
-          CREATE TABLE IF NOT EXISTS departures (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            station_id TEXT NOT NULL,
-            destination TEXT NOT NULL,
-            platform TEXT,
-            minutes INTEGER NOT NULL,
-            direction TEXT NOT NULL,
-            color TEXT,
-            length INTEGER,
-            bike_flag INTEGER,
-            delay INTEGER DEFAULT 0,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            date DATE,
-            FOREIGN KEY (station_id) REFERENCES stations(id)
-          );
-          CREATE TABLE IF NOT EXISTS daily_stats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            station_id TEXT NOT NULL,
-            date DATE NOT NULL,
-            total_departures INTEGER DEFAULT 0,
-            delayed_departures INTEGER DEFAULT 0,
-            avg_delay_minutes REAL DEFAULT 0,
-            max_delay_minutes INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (station_id) REFERENCES stations(id)
-          );"
-        fi
+        # Remove existing database if it exists
+        rm -f data/bart.db
+        
+        # Create new database with correct schema
+        sqlite3 data/bart.db "CREATE TABLE IF NOT EXISTS stations (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          abbr TEXT NOT NULL,
+          city TEXT,
+          county TEXT,
+          state TEXT,
+          zipcode TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS departures (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          station_id TEXT NOT NULL,
+          destination TEXT NOT NULL,
+          platform TEXT,
+          minutes INTEGER NOT NULL,
+          direction TEXT NOT NULL,
+          color TEXT,
+          length INTEGER,
+          bike_flag INTEGER,
+          delay INTEGER DEFAULT 0,
+          timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+          date DATE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (station_id) REFERENCES stations(id)
+        );
+        CREATE TABLE IF NOT EXISTS daily_stats (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          station_id TEXT NOT NULL,
+          date DATE NOT NULL,
+          total_departures INTEGER DEFAULT 0,
+          delayed_departures INTEGER DEFAULT 0,
+          avg_delay_minutes REAL DEFAULT 0,
+          max_delay_minutes INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (station_id) REFERENCES stations(id)
+        );"
     
     - name: Set up Google Cloud credentials
       uses: google-github-actions/auth@v1
@@ -78,6 +81,6 @@ jobs:
         export PYTHONPATH=$PYTHONPATH:$(pwd)
         python etl/github_scheduler.py
       env:
-        DATABASE_PATH: data/bart_history.db
+        DATABASE_PATH: data/bart.db
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
         STORAGE_BUCKET: ${{ secrets.GCP_STORAGE_BUCKET }}
