@@ -181,9 +181,29 @@ function App() {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        BART Departures
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 4 }}>
+        <img 
+          src="https://upload.wikimedia.org/wikipedia/commons/0/0c/GoldenGateBridge-001.jpg" 
+          alt="Golden Gate Bridge" 
+          style={{ 
+            height: '120px', 
+            marginRight: '20px',
+            objectFit: 'cover',
+            borderRadius: '8px',
+            boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
+          }}
+        />
+        <Typography 
+          variant="h4" 
+          component="h1" 
+          sx={{ 
+            fontWeight: 'bold',
+            color: '#000000'
+          }}
+        >
+          BAY AREA RAPID TRANSIT (BART) Departures
+        </Typography>
+      </Box>
       <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 4 }}>
         Real-time BART train departures and arrivals. Select a station to view upcoming trains, 
         including destination, direction, and estimated times. Data updates every 30 seconds.
@@ -217,6 +237,7 @@ function App() {
         <Tabs value={tabValue} onChange={handleTabChange} aria-label="BART data tabs">
           <Tab label="Live Departures" />
           <Tab label="Historical Data" />
+          <Tab label="BART Map" />
         </Tabs>
       </Box>
 
@@ -376,6 +397,27 @@ function App() {
             </Table>
           </TableContainer>
         )}
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={2}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+          <img 
+            src="/images/bart_map.png" 
+            alt="BART System Map" 
+            style={{ 
+              maxWidth: '100%', 
+              height: 'auto',
+              boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+              borderRadius: '8px',
+              maxHeight: '104vh',
+              transform: 'scale(1.3)',
+              transformOrigin: 'center top'
+            }} 
+          />
+        </Box>
+        <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 2 }}>
+          BART System Map showing all stations and lines
+        </Typography>
       </TabPanel>
     </Container>
   );
