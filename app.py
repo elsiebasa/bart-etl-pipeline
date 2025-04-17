@@ -102,8 +102,8 @@ def get_station_analytics():
         SELECT 
             d.destination,
             COUNT(*) as total_departures,
-            COUNT(CASE WHEN d.delay > 0 THEN 1 END) as delayed_trains,
-            COALESCE(AVG(CASE WHEN d.delay > 0 THEN d.delay ELSE NULL END), 0) as avg_delay_minutes
+            COUNT(CASE WHEN d.delay != 0 THEN 1 END) as delayed_trains,
+            ROUND(COALESCE(AVG(ABS(d.delay)), 0), 1) as avg_delay_minutes
         FROM departures d
         WHERE d.timestamp >= datetime('now', '-7 days')
         GROUP BY d.destination

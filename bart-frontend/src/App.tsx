@@ -51,7 +51,7 @@ function TabPanel(props: TabPanelProps) {
 function App() {
   const [departures, setDepartures] = useState<Departure[]>([]);
   const [stations, setStations] = useState<Station[]>([]);
-  const [selectedStation, setSelectedStation] = useState<string>('');
+  const [selectedStation, setSelectedStation] = useState<string>('12th');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -167,6 +167,18 @@ function App() {
 
   const selectedStationInfo = stations.find(s => s.abbr === selectedStation);
 
+  const calculateAverageDelay = () => {
+    const delayedTrains = departures.filter(d => d.delay > 0);
+    if (delayedTrains.length === 0) return 0;
+    const totalDelay = delayedTrains.reduce((sum, d) => sum + d.delay, 0);
+    return (totalDelay / delayedTrains.length).toFixed(1);
+  };
+
+  const calculateMaxDelay = () => {
+    if (departures.length === 0) return 0;
+    return Math.max(...departures.map(d => d.delay));
+  };
+
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Typography variant="h4" component="h1" gutterBottom>
@@ -205,7 +217,6 @@ function App() {
         <Tabs value={tabValue} onChange={handleTabChange} aria-label="BART data tabs">
           <Tab label="Live Departures" />
           <Tab label="Historical Data" />
-          <Tab label="Historical Stats" />
         </Tabs>
       </Box>
 
@@ -218,10 +229,18 @@ function App() {
           <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
         ) : (
           <>
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
               <Typography variant="body2" color="text.secondary">
                 Last updated: {formatLastUpdated(lastUpdated)}
               </Typography>
+              <Box>
+                <Typography variant="body2" color="text.secondary" sx={{ display: 'inline', mr: 2 }}>
+                  Average Delay: {calculateAverageDelay()} min
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ display: 'inline' }}>
+                  Max Delay: {calculateMaxDelay()} min
+                </Typography>
+              </Box>
             </Box>
             <TableContainer component={Paper}>
               <Table>
@@ -332,55 +351,6 @@ function App() {
                   <TableCell>Total Departures</TableCell>
                   <TableCell>Delayed Trains</TableCell>
                   <TableCell>Average Delay (min)</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {historicalData.map((data, index) => (
-                  <TableRow key={index}>
-                    <TableCell>
-                      <Typography variant="subtitle1">
-                        {data.destination}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>{data.total_departures}</TableCell>
-                    <TableCell>{data.delay_count}</TableCell>
-                    <TableCell>
-                      {data.avg_delay_minutes ? data.avg_delay_minutes.toFixed(1) : '0'}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        )}
-      </TabPanel>
-
-      <TabPanel value={tabValue} index={2}>
-        <Typography variant="h6" gutterBottom>
-          Station Performance Statistics (Last 5 Days)
-        </Typography>
-        {historicalLoading ? (
-          <Box display="flex" justifyContent="center" my={4}>
-            <CircularProgress />
-          </Box>
-        ) : historicalError ? (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {historicalError}
-          </Alert>
-        ) : historicalData.length === 0 ? (
-          <Alert severity="info" sx={{ mb: 2 }}>
-            No historical data available.
-          </Alert>
-        ) : (
-          <TableContainer component={Paper}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Station</TableCell>
-                  <TableCell>Direction</TableCell>
-                  <TableCell>Total Departures</TableCell>
-                  <TableCell>Delayed Trains</TableCell>
-                  <TableCell>Average Delay (min)</TableCell>
                   <TableCell>Max Delay (min)</TableCell>
                 </TableRow>
               </TableHead>
@@ -389,18 +359,11 @@ function App() {
                   <TableRow key={index}>
                     <TableCell>
                       <Typography variant="subtitle1">
-                        {data.station}
+                        {data.destination || 'All Destinations'}
                       </Typography>
                     </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={data.direction}
-                        style={getDirectionStyle(data.direction)}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>{data.total_departures}</TableCell>
-                    <TableCell>{data.delay_count}</TableCell>
+                    <TableCell>{data.total_departures || 0}</TableCell>
+                    <TableCell>{data.delay_count || 0}</TableCell>
                     <TableCell>
                       {data.avg_delay_minutes ? data.avg_delay_minutes.toFixed(1) : '0'}
                     </TableCell>
